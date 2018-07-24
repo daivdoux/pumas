@@ -137,7 +137,7 @@ static double medium2(struct pumas_context * context,
                         step = z / uz;
                 else if (uz < -FLT_EPSILON)
                         /* The muon is backward upgoing. The next boundary is
-                        * the rock-air interface. */
+                         * the rock-air interface. */
                         step = (z - rock_thickness) / uz;
         } else if (z < PRIMARY_ALTITUDE) {
                 if (medium_ptr != NULL) *medium_ptr = media + 1;
@@ -147,7 +147,7 @@ static double medium2(struct pumas_context * context,
                         step = (z - rock_thickness) / uz;
                 else if (uz < -FLT_EPSILON)
                         /* The muon is backward upgoing. The next boundary is
-                        * the air top. */
+                         * the air top. */
                         step = (z - PRIMARY_ALTITUDE) / uz;
         } else {
                 /* The muon is outside of the simulation area */
@@ -175,8 +175,9 @@ double spectrum_gaisser(double cos_theta, double kinetic)
         const double E_K = 850.;
         const double E = kinetic + 0.10566;
         const double E_star = E * cos_theta;
-        return 1.4 * pow(E, -2.7) * (r_pi / (1. + 1.1 * E_star / E_pi) +
-                                        r_K / (1. + 1.1 * E_star / E_K));
+        return 1.4 * pow(E, -2.7) *
+            (r_pi / (1. + 1.1 * E_star / E_pi) +
+                r_K / (1. + 1.1 * E_star / E_K));
 }
 
 /* The executable main entry point */
@@ -184,8 +185,9 @@ int main(int narg, char * argv[])
 {
         /* Check the number of arguments */
         if (narg < 4) {
-                fprintf(stderr, "Usage: %s ROCK_THICKNESS ELEVATION "
-                                "KINETIC_ENERGY[_MIN] [KINETIC_ENERGY_MAX]\n",
+                fprintf(stderr,
+                    "Usage: %s ROCK_THICKNESS ELEVATION "
+                    "KINETIC_ENERGY[_MIN] [KINETIC_ENERGY_MAX]\n",
                     argv[0]);
                 exit_gracefully(EXIT_FAILURE);
         }
@@ -236,6 +238,10 @@ int main(int narg, char * argv[])
         /* Provide a PRNG for the Monte-Carlo simulation */
         context->random = &uniform01;
 
+        /* Add a state recorder to the simulation context */
+        pumas_recorder_create(context, &context->recorder);
+        context->recorder->period = 0; /* Record only media changes and DELs */
+
         /* Run the Monte-Carlo */
         const double cos_theta = cos((90. - elevation) / 180. * M_PI);
         const double sin_theta = sqrt(1. - cos_theta * cos_theta);
@@ -261,10 +267,13 @@ int main(int narg, char * argv[])
                         kf = kinetic_min;
                         wf = 1;
                 }
-                struct pumas_state state = {.charge = -1.,
+                struct pumas_state state = { .charge = -1.,
                         .kinetic = kf,
                         .weight = wf,
                         .direction = { -sin_theta, 0., -cos_theta } };
+
+                /* Clear the recorder's history */
+                pumas_recorder_clear(context->recorder);
 
                 /* Transport the muon backwards */
                 const double kinetic_threshold = kinetic_max * 1E+03;
@@ -286,6 +295,19 @@ int main(int narg, char * argv[])
 
                         /* Check if the muon has exit the simulation area */
                         if (medium2(context, &state, NULL) <= 0.) break;
+                }
+
+                /* Dump the recorded event to stderr */
+                fprintf(stderr, "# Event %d\n", i + 1);
+                struct pumas_frame * frame;
+                for (frame = context->recorder->first; frame != NULL;
+                     frame = frame->next) {
+                        const char * material = "Void";
+                        if (frame->medium != NULL)
+                                pumas_material_name(
+                                    frame->medium->material, &material);
+                        fprintf(stderr, "    %-15s %.3lE\n", material,
+                            frame->state.distance);
                 }
 
                 /* Update the integrated flux */
