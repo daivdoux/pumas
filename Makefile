@@ -14,7 +14,8 @@ lib/libpumas.so: src/pumas.c include/pumas.h
 clean:
 	@rm -rf lib bin
 
-examples: bin/example-straight bin/example-load bin/example-geometry
+examples: bin/example-straight bin/example-load bin/example-geometry           \
+	bin/example-extended
 
 bin/example-%: examples/%.c lib/libpumas.so
 	@mkdir -p bin
